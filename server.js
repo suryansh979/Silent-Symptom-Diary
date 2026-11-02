@@ -31,7 +31,7 @@ const app = express();
 // Allow requests from your specific frontend domain (Removed the /#/)
 app.use(
   cors({
-    origin: "https://silent-symptom-diary-013efe.netlify.app", 
+    origin: ["https://silent-symptom-diary-013efe.netlify.app","https://localhost:5173"], 
     credentials: true,
   })
 );
