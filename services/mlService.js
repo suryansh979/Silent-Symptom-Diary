@@ -1,25 +1,21 @@
-// backend/services/mlService.js
 const axios = require('axios');
 
-// Yeh function hamara messenger hai jo Python ko data dega
-const analyzeWithML = async (features) => {
+const getPrediction = async (patientData) => {
     try {
-        // FastAPI ka default address aur '/predict' endpoint
-        const pythonApiUrl = 'http://localhost:8000/predict'; 
-        
-        // Node.js is acting like a client sending data to Python
-        const response = await axios.post(pythonApiUrl, features);
-        
-        // Python jo result dega (e.g., risk_level), wo hum return kar denge
-        return response.data; 
+        // Send data to the live Python ML model
+        const response = await axios.post(process.env.ML_API_URL, patientData, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
+        // Return the prediction result back to your controller
+        return response.data;
     } catch (error) {
-        // Agar ML server band hai (off hai), toh Node.js crash nahi hona chahiye!
-        console.error("ML Service Error - Could not reach Python:", error.message);
-        
-        // Hum null return karenge, taaki backend gracefully handle kar sake
-        return null; 
+        console.error("ML Service Error:", error.message);
+        // Fallback or error handling if the ML server is asleep or crashes
+        throw new Error("Failed to get prediction from ML model");
     }
 };
 
-module.exports = { analyzeWithML };
+module.exports = { getPrediction };
