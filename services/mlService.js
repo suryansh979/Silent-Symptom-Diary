@@ -1,21 +1,63 @@
 const axios = require('axios');
 
 const getPrediction = async (patientData) => {
-    try {
-        // Send data to the live Python ML model
-        const response = await axios.post(process.env.ML_API_URL, patientData, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+    
+    const baseUrl = process.env.ML_API_URL; 
+    
+    // Array to hold our concurrent API calls
+    const mlRequests = [];
 
-        // Return the prediction result back to your controller
-        return response.data;
-    } catch (error) {
-        console.error("ML Service Error:", error.message);
-        // Fallback or error handling if the ML server is asleep or crashes
-        throw new Error("Failed to get prediction from ML model");
+    // 1. Route Voice Data
+    if (patientData.speech > 0) {
+        // Replace with the exact JSON keys the /predict/voice endpoint expects
+        const voicePayload = { speech_features: patientData.speech }; 
+        
+        const voiceReq = axios.post(`${baseUrl}/predict/voice`, voicePayload)
+            .then(res => ({ type: 'voice', score: res.data.prediction || 0 }))
+            .catch(err => {
+                console.error("Voice ML failed:", err.message);
+                return { type: 'voice', score: 0 };
+            });
+            
+        mlRequests.push(voiceReq);
     }
+
+    // 2. Route Rest Tremor Data
+    if (patientData.tremor > 0) {
+        // Replace with the exact JSON keys the /predict/motion/rest endpoint expects
+        const tremorPayload = { tremor_features: patientData.tremor };
+        
+        const tremorReq = axios.post(`${baseUrl}/predict/motion/rest`, tremorPayload)
+            .then(res => ({ type: 'tremor', score: res.data.prediction || 0 }))
+            .catch(err => {
+                console.error("Tremor ML failed:", err.message);
+                return { type: 'tremor', score: 0 };
+            });
+            
+        mlRequests.push(tremorReq);
+    }
+
+    // 3. Execute all ML calls simultaneously
+    // Promise.all ensures Node.js doesn't wait for Voice to finish before starting Tremor
+    const results = await Promise.all(mlRequests);
+
+    // 4. Calculate Dynamic Average
+    let totalRisk = 0;
+    let successfulTests = 0;
+
+    results.forEach(result => {
+        if (result.score > 0) {
+            totalRisk += result.score;
+            successfulTests += 1;
+        }
+    });
+
+    const finalRiskScore = successfulTests > 0 ? (totalRisk / successfulTests) : 0;
+
+    return {
+        prediction: finalRiskScore,
+        label: finalRiskScore > 0.60 ? "Parkinson's pattern" : "Healthy control pattern"
+    };
 };
 
 module.exports = { getPrediction };
